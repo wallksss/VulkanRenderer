@@ -1,5 +1,3 @@
-// VulkanApplication.h
-
 #pragma once
 
 #include <vector>
@@ -11,11 +9,14 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
 
-#include "mesh.h" // Assumindo que a struct Vertex está aqui
+#include "mesh.h"
+#include "initializers.h"
 
-// Estruturas auxiliares que a classe usa
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
@@ -44,12 +45,10 @@ public:
     void cleanup();
 
 private:
-    // Funções de inicialização e ciclo principal
     void initWindow();
     void initVulkan();
     void mainLoop();
 
-    // Funções de criação de recursos Vulkan
     void createInstance();
     void setupDebugMessenger();
     void createSurface();
@@ -75,20 +74,17 @@ private:
     void createCommandBuffer();
     void createSyncObjects();
 
-    // Funções do ciclo de desenho
     void drawFrame();
     void updateUniformBuffer(uint32_t currentImage);
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
-    // Funções de limpeza e recriação
     void cleanupSwapChain();
     void recreateSwapChain();
 
-    // Funções auxiliares
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     bool checkValidationLayerSupport();
     std::vector<const char*> getRequiredExtensions();
-    bool isDeviceSuitable(VkPhysicalDevice device);
+bool isDeviceSuitable(VkPhysicalDevice device);
     bool checkDeviceExtensionSupport(VkPhysicalDevice device);
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
@@ -109,11 +105,9 @@ private:
     VkFormat findDepthFormat();
     bool hasStencilComponent(VkFormat format);
 
-    // Callback estático
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
 
-    // Membros da classe (variáveis)
     GLFWwindow* window;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
@@ -137,8 +131,7 @@ private:
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
-    
-    // Recursos do modelo e buffers
+
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
     VkBuffer vertexBuffer;
@@ -149,7 +142,6 @@ private:
     std::vector<VkDeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped;
     
-    // Recursos de textura e descritores
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;
     VkImageView textureImageView;
@@ -157,12 +149,10 @@ private:
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
 
-    // Recursos de profundidade (Depth)
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
     
-    // Estado da aplicação
     uint32_t currentFrame = 0;
     bool framebufferResized = false;
 };
