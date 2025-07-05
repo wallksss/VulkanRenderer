@@ -17,10 +17,26 @@
 #include "mesh.h"
 #include "initializers.h"
 
+const float BALL_RADIUS = 0.057f;
+
+struct PoolBall {
+    int id;
+    glm::vec2 position;
+    glm::vec2 velocity;
+    float radius;
+    bool is_moving;
+};
+
+struct CueStick {
+    glm::vec2 position;
+    float angle;
+    float power;
+};
+
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
-
+    
     bool isComplete() {
         return graphicsFamily.has_value() && presentFamily.has_value();
     }
@@ -33,22 +49,22 @@ struct SwapChainSupportDetails {
 };
 
 struct UniformBufferObject {
-    alignas(16) glm::mat4 model;
+    // alignas(16) glm::mat4 model;
     alignas(16) glm::mat4 view;
     alignas(16) glm::mat4 proj;
 };
 
 class VulkanApplication {
-public:
+    public:
     void init();
     void run();
     void cleanup();
-
-private:
+    
+    private:
     void initWindow();
     void initVulkan();
     void mainLoop();
-
+    
     void createInstance();
     void setupDebugMessenger();
     void createSurface();
@@ -73,18 +89,18 @@ private:
     void createDescriptorSets();
     void createCommandBuffer();
     void createSyncObjects();
-
+    
     void drawFrame();
     void updateUniformBuffer(uint32_t currentImage);
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-
+    
     void cleanupSwapChain();
     void recreateSwapChain();
-
+    
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     bool checkValidationLayerSupport();
     std::vector<const char*> getRequiredExtensions();
-bool isDeviceSuitable(VkPhysicalDevice device);
+    bool isDeviceSuitable(VkPhysicalDevice device);
     bool checkDeviceExtensionSupport(VkPhysicalDevice device);
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
@@ -104,10 +120,10 @@ bool isDeviceSuitable(VkPhysicalDevice device);
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
     VkFormat findDepthFormat();
     bool hasStencilComponent(VkFormat format);
-
+    
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
-
+    
     GLFWwindow* window;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
@@ -131,7 +147,7 @@ bool isDeviceSuitable(VkPhysicalDevice device);
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
-
+    
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
     VkBuffer vertexBuffer;
@@ -148,11 +164,20 @@ bool isDeviceSuitable(VkPhysicalDevice device);
     VkSampler textureSampler;
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
-
+    
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
     
     uint32_t currentFrame = 0;
     bool framebufferResized = false;
+    
+    void setupPoolTable();
+    void processInput(float deltaTime);
+    void updatePhysics(float deltaTime);
+    std::vector<PoolBall> balls;
+    CueStick cue;
+    
+    glm::vec2 table_min_bounds;
+    glm::vec2 table_max_bounds;
 };

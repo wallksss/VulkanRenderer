@@ -1,2 +1,15 @@
-/shaders/*.spv
+VulkanTest
+*.o
+*.spv
 
+.vscode/
+.idea/
+*.swp
+*.swo
+
+bin/
+build/
+obj/
+
+.DS_Store
+Thumbs.db
