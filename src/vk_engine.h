@@ -3,6 +3,7 @@
 #include <vector>
 #include <optional>
 #include <string>
+#include <unordered_map>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -53,6 +54,32 @@ struct UniformBufferObject {
     alignas(16) glm::mat4 view;
     alignas(16) glm::mat4 proj;
 };
+
+//gihtheghost
+
+//vai armazenar a cor
+struct Material {
+	glm::vec3 color{1.0f, 1.0f, 1.0f};
+};
+
+// associa a geometria com os seus identificadores no buffer da GPU
+struct Mesh {
+    std::vector<Vertex> _vertices;
+    std::vector<uint32_t> _indices;
+    VkBuffer _vertexBuffer{VK_NULL_HANDLE};
+    VkDeviceMemory _vertexBufferMemory{VK_NULL_HANDLE};
+    VkBuffer _indexBuffer{VK_NULL_HANDLE};
+    VkDeviceMemory _indexBufferMemory{VK_NULL_HANDLE};
+};
+
+// determina como será o objeto que deve ser desenhado na cena
+struct RenderObject {
+    std::string meshName;
+    std::string materialName;
+    glm::mat4 transformMatrix;
+};
+
+
 
 class VulkanApplication {
     public:
@@ -181,3 +208,6 @@ class VulkanApplication {
     glm::vec2 table_min_bounds;
     glm::vec2 table_max_bounds;
 };
+
+
+
