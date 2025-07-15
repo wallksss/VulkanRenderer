@@ -1,5 +1,5 @@
 #include "mesh.h"
-#include "libs/tiny_obj_loader.h"
+#include "tiny_obj_loader.h"
 #include <iostream>
 
   VkVertexInputBindingDescription Vertex::getBindingDescription() {

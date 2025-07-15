@@ -1,6 +1,7 @@
-VulkanTest
+VulkanTest*
 *.o
 *.spv
+*.pdb
 
 .vscode/
 .idea/
