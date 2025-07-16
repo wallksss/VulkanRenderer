@@ -177,18 +177,48 @@ void VulkanApplication::setupPoolTable() {
 }
 
 void VulkanApplication::processInput(float deltaTime) {
-    if (balls[0].is_moving) return;
-    
+    // --- Camera Controls ---
     float rotationSpeed = 2.0f * deltaTime;
-    
+    float zoomSpeed = 5.0f * deltaTime;
+
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+        cameraYaw -= rotationSpeed;
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+        cameraYaw += rotationSpeed;
+    }
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+        cameraPitch -= rotationSpeed;
+    }
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+        cameraPitch += rotationSpeed;
+    }
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+        cameraDistance -= zoomSpeed;
+    }
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+        cameraDistance += zoomSpeed;
+    }
+
+    // Clamp pitch to avoid flipping and gimbal lock
+    cameraPitch = glm::clamp(cameraPitch, glm::radians(5.0f), glm::radians(85.0f));
+    // Clamp distance
+    cameraDistance = glm::clamp(cameraDistance, 2.0f, 50.0f);
+
+
+    // --- Cue Controls (only if cue ball is not moving) ---
+    if (balls[0].is_moving) return;
+
+    float cueRotationSpeed = 2.0f * deltaTime;
+
     if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-        cue.angle -= rotationSpeed;
+        cue.angle -= cueRotationSpeed;
     }
-    
+
     if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-        cue.angle += rotationSpeed;
+        cue.angle += cueRotationSpeed;
     }
-    
+
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
         // Atirar!
         glm::vec2 direction = {glm::cos(cue.angle), glm::sin(cue.angle)};
@@ -342,9 +372,10 @@ void VulkanApplication::load_model(const char* filename) {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    std::string base_dir = std::string(filename).substr(0, std::string(filename).find_last_of("/\\") + 1);
+    // The material files are in the "textures" directory
+    const char* mtl_basedir = "textures/";
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename, base_dir.c_str(), true)) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename, mtl_basedir, true)) {
         throw std::runtime_error(warn + err);
     }
 
@@ -368,15 +399,9 @@ void VulkanApplication::load_model(const char* filename) {
         Mesh newMesh;
         std::unordered_map<Vertex, uint32_t> uniqueVertices{};
 
-        // >> LÓGICA NOVA <<
-        // Mapa para agrupar todos os índices por ID de material.
-        // A chave é o ID do material, o valor é uma lista de índices que usam esse material.
         std::map<int, std::vector<uint32_t>> indices_by_material;
 
-        // Este loop processa TODOS os vértices primeiro para preencher o buffer de vértices
-        // e agrupa os índices por material.
         for (size_t i = 0; i < shape.mesh.indices.size(); ++i) {
-            // tinyobjloader nos dá um ID de material para cada face (triângulo).
             size_t face_index = i / 3;
             int material_id = shape.mesh.material_ids[face_index];
             const auto& index = shape.mesh.indices[i];
@@ -400,44 +425,31 @@ void VulkanApplication::load_model(const char* filename) {
                 newMesh._vertices.push_back(vertex);
             }
 
-            // Adiciona o índice final ao grupo do material correto.
             indices_by_material[material_id].push_back(uniqueVertices[vertex]);
         }
 
-        // >> LÓGICA NOVA <<
-        // Agora, construímos as SubMeshes e o buffer de índice final a partir dos grupos que criamos.
         uint32_t currentIndexOffset = 0;
         for(auto const& [mat_id, mat_indices] : indices_by_material) {
             SubMesh submesh;
             submesh.firstIndex = currentIndexOffset;
             submesh.indexCount = static_cast<uint32_t>(mat_indices.size());
 
-            // Se mat_id for -1, significa que não há material definido.
             if (mat_id >= 0) {
                 submesh.materialName = materials[mat_id].name;
             } else {
-                submesh.materialName = "Default"; // Usa o material padrão
+                submesh.materialName = "Default";
             }
 
-            // Adiciona a sub-malha à lista da malha principal.
             newMesh._subMeshes.push_back(submesh);
-
-            // Adiciona os índices desta sub-malha ao buffer de índices global e contínuo da malha.
             newMesh._indices.insert(newMesh._indices.end(), mat_indices.begin(), mat_indices.end());
-
-            // Atualiza o offset para a próxima sub-malha.
             currentIndexOffset += submesh.indexCount;
         }
 
-        // Se a malha não tiver índices (pode acontecer), não a adicione
         if (newMesh._indices.empty()) {
             continue;
         }
 
-        // Cria buffers da mesh pronta na GPU
         create_mesh_buffers(newMesh);
-
-        // Armazena a malha completa no mapa
         _meshes[shape.name] = newMesh;
     }
 }
@@ -501,7 +513,8 @@ void VulkanApplication::setup_scene() {
     if (_meshes.find(table_object.meshName) == _meshes.end()) {
          std::cerr << "ERRO: Malha da mesa '" << table_object.meshName << "' nao encontrada!" << std::endl;
     }
-    glm::mat4 table_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -0.8f));
+    // Move a mesa para baixo para que sua superfície fique no plano Z=0
+    glm::mat4 table_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -10.0f));
     glm::mat4 table_scale = glm::scale(glm::mat4(1.0f), scale_vector);
     table_object.transformMatrix = table_translation * table_scale;
     _staticRenderables.push_back(table_object);
@@ -512,7 +525,8 @@ void VulkanApplication::setup_scene() {
     if (_meshes.find(lamp_object.meshName) == _meshes.end()) {
          std::cerr << "ERRO: Malha da lampada '" << lamp_object.meshName << "' nao encontrada!" << std::endl;
     }
-    glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 1.8f));
+    // Posiciona a lâmpada acima da mesa
+    glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
     glm::mat4 lamp_scale = glm::scale(glm::mat4(1.0f), scale_vector);
     lamp_object.transformMatrix = lamp_translation * lamp_scale;
     _staticRenderables.push_back(lamp_object);
@@ -557,6 +571,88 @@ void VulkanApplication::setup_scene() {
     std::cout << "setup_scene concluido. Total de renderizaveis dinamicos: " << _dynamicRenderables.size() << ". Total de bolas na fisica: " << balls.size() << std::endl;
 }
 
+void VulkanApplication::create_debug_axes() {
+    // 1. Create materials for the axes
+    _materials["debug_red"] = Material{{0.8f, 0.1f, 0.1f}};
+    _materials["debug_green"] = Material{{0.1f, 0.8f, 0.1f}};
+    _materials["debug_blue"] = Material{{0.1f, 0.1f, 0.8f}};
+
+    const float length = 1.5f;
+    const float width = 0.05f;
+
+    // --- Create X-Axis Mesh (Red) ---
+    {
+        Mesh xAxisMesh;
+        xAxisMesh._vertices.push_back({{0, -width, 0}, {0,0}});
+        xAxisMesh._vertices.push_back({{0, width, 0}, {0,0}});
+        xAxisMesh._vertices.push_back({{length, width, 0}, {0,0}});
+        xAxisMesh._vertices.push_back({{length, -width, 0}, {0,0}});
+        xAxisMesh._indices = {0, 1, 2, 0, 2, 3};
+        
+        SubMesh submesh;
+        submesh.materialName = "debug_red";
+        submesh.firstIndex = 0;
+        submesh.indexCount = 6;
+        xAxisMesh._subMeshes.push_back(submesh);
+
+        create_mesh_buffers(xAxisMesh);
+        _meshes["debug_axis_x"] = xAxisMesh;
+
+        RenderObject axis_x_object;
+        axis_x_object.meshName = "debug_axis_x";
+        axis_x_object.transformMatrix = glm::mat4(1.0f);
+        _staticRenderables.push_back(axis_x_object);
+    }
+
+    // --- Create Y-Axis Mesh (Green) ---
+    {
+        Mesh yAxisMesh;
+        yAxisMesh._vertices.push_back({{-width, 0, 0}, {0,0}});
+        yAxisMesh._vertices.push_back({{width, 0, 0}, {0,0}});
+        yAxisMesh._vertices.push_back({{width, length, 0}, {0,0}});
+        yAxisMesh._vertices.push_back({{-width, length, 0}, {0,0}});
+        yAxisMesh._indices = {0, 1, 2, 0, 2, 3};
+
+        SubMesh submesh;
+        submesh.materialName = "debug_green";
+        submesh.firstIndex = 0;
+        submesh.indexCount = 6;
+        yAxisMesh._subMeshes.push_back(submesh);
+
+        create_mesh_buffers(yAxisMesh);
+        _meshes["debug_axis_y"] = yAxisMesh;
+
+        RenderObject axis_y_object;
+        axis_y_object.meshName = "debug_axis_y";
+        axis_y_object.transformMatrix = glm::mat4(1.0f);
+        _staticRenderables.push_back(axis_y_object);
+    }
+
+    // --- Create Z-Axis Mesh (Blue) ---
+    {
+        Mesh zAxisMesh;
+        zAxisMesh._vertices.push_back({{-width, 0, 0}, {0,0}});
+        zAxisMesh._vertices.push_back({{width, 0, 0}, {0,0}});
+        zAxisMesh._vertices.push_back({{width, 0, length}, {0,0}});
+        zAxisMesh._vertices.push_back({{-width, 0, length}, {0,0}});
+        zAxisMesh._indices = {0, 1, 2, 0, 2, 3};
+
+        SubMesh submesh;
+        submesh.materialName = "debug_blue";
+        submesh.firstIndex = 0;
+        submesh.indexCount = 6;
+        zAxisMesh._subMeshes.push_back(submesh);
+
+        create_mesh_buffers(zAxisMesh);
+        _meshes["debug_axis_z"] = zAxisMesh;
+
+        RenderObject axis_z_object;
+        axis_z_object.meshName = "debug_axis_z";
+        axis_z_object.transformMatrix = glm::mat4(1.0f);
+        _staticRenderables.push_back(axis_z_object);
+    }
+}
+
 // Em vk_engine.cpp
 
 // Em vk_engine.cpp
@@ -564,12 +660,9 @@ void VulkanApplication::setup_scene() {
 // ADICIONAR (Substitua a função update_scene inteira)
 void VulkanApplication::update_scene(float deltaTime) {
     glm::vec3 scale_vector(MODEL_SCALE);
+    glm::mat4 y_to_z_up_rotation = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
-    // Garante que o número de bolas na física corresponde ao número de renderizáveis de bola
-    // (O número total de renderizáveis dinâmicos é o número de bolas + 1 para o taco)
     if (_dynamicRenderables.size() != balls.size() + 1) {
-        // Isso pode acontecer se uma malha não foi carregada. Não fazemos nada para evitar um crash.
-        // A mensagem de erro em setup_scene já deve ter nos alertado.
         return;
     }
 
@@ -578,24 +671,36 @@ void VulkanApplication::update_scene(float deltaTime) {
         const PoolBall& ball_phys = balls[i];
         RenderObject& ball_renderable = _dynamicRenderables[i];
 
-        glm::vec3 ball_position_3d = glm::vec3(ball_phys.position.x, ball_phys.position.y, BALL_RADIUS);
+        glm::vec3 ball_position_3d = glm::vec3(ball_phys.position.x, BALL_RADIUS, ball_phys.position.y);
         glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), ball_position_3d);
         glm::mat4 scale_matrix = glm::scale(glm::mat4(1.0f), scale_vector);
+        // As bolas são esferas, então a rotação do eixo não é necessária para elas.
         ball_renderable.transformMatrix = translation_matrix * scale_matrix;
     }
 
-    // Atualiza o taco (que é o último elemento)
+    // Atualiza o taco
     RenderObject& cue_renderable = _dynamicRenderables.back();
 
     if (!balls[0].is_moving) {
-        glm::vec2 cue_direction = {glm::cos(cue.angle), glm::sin(cue.angle)};
-        glm::vec3 cue_position_3d = glm::vec3(balls[0].position.x, balls[0].position.y, BALL_RADIUS) - glm::vec3(cue_direction, 0.0f) * 0.7f;
+        const PoolBall& cue_ball_phys = balls[0];
+        glm::vec3 cue_ball_pos_3d = glm::vec3(cue_ball_phys.position.x, BALL_RADIUS, cue_ball_phys.position.y);
 
-        glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), cue_position_3d);
-        glm::mat4 rotation_matrix = glm::rotate(glm::mat4(1.0f), cue.angle, glm::vec3(0.0f, 0.0f, 1.0f));
+        // 1. Começa com a escala e a rotação de correção do eixo do modelo.
         glm::mat4 scale_matrix = glm::scale(glm::mat4(1.0f), scale_vector);
-        cue_renderable.transformMatrix = translation_matrix * rotation_matrix * scale_matrix;
+        glm::mat4 base_transform = y_to_z_up_rotation * scale_matrix;
+
+        // 2. Define a rotação do taco em torno do eixo Y (para cima).
+        glm::mat4 gameplay_rotation = glm::rotate(glm::mat4(1.0f), cue.angle, glm::vec3(0.0f, 1.0f, 0.0f));
+
+        // 3. Translada o taco para a posição da bola branca.
+        glm::mat4 translation_to_ball = glm::translate(glm::mat4(1.0f), cue_ball_pos_3d);
+
+        // 4. Compõe a matriz final: move para a bola, gira, e então aplica a transformação base do modelo.
+        // Isso faz com que o taco gire em torno da bola branca.
+        cue_renderable.transformMatrix = translation_to_ball * gameplay_rotation * base_transform;
+
     } else {
+        // Move o taco para fora da tela quando não está em uso.
         cue_renderable.transformMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(100.0f));
     }
 }
@@ -635,6 +740,7 @@ void VulkanApplication::initVulkan() {
     setupPoolTable();
     std::cout << "  [OK] setupPoolTable" << std::endl;
     setup_scene(); // Já temos logs dentro desta
+    create_debug_axes(); // Adiciona os eixos de depuração
     std::cout << "  [OK] setup_scene" << std::endl;
 
     createUniformBuffers();
@@ -1249,27 +1355,27 @@ void VulkanApplication::drawFrame() {
 void VulkanApplication::updateUniformBuffer(uint32_t currentImage) {
     UniformBufferObject ubo{};
 
-    // Posição da câmera: para trás no eixo Y, para a direita no eixo X, e para cima no eixo Z.
-    glm::vec3 cameraPos = glm::vec3(5.75f, -5.75f, 5.75f); // (2.5 * 1.5 = 3.75)
-
-    // Ponto de observação: ainda o centro da mesa.
     glm::vec3 lookAtTarget = glm::vec3(0.0f, 0.0f, 0.0f);
 
-    // Vetor "para cima": para uma câmera inclinada, o eixo Z do mundo ainda pode ser "para cima".
-    glm::vec3 upVector = glm::vec3(0.0f, 0.0f, 1.0f);
+    // Calculate camera position based on yaw, pitch, and distance (orbiting camera)
+    glm::vec3 cameraPos;
+    cameraPos.x = lookAtTarget.x + cameraDistance * cos(cameraPitch) * sin(cameraYaw);
+    cameraPos.y = lookAtTarget.y + cameraDistance * cos(cameraPitch) * cos(cameraYaw);
+    cameraPos.z = lookAtTarget.z + cameraDistance * sin(cameraPitch);
+
+    // O vetor "para cima" da câmera agora é o eixo Y do mundo.
+    // Isso estabiliza a câmera e evita o gimbal lock ao olhar diretamente para baixo do eixo Z.
+    glm::vec3 upVector = glm::vec3(0.0f, 1.0f, 0.0f);
 
     ubo.view = glm::lookAt(cameraPos, lookAtTarget, upVector);
 
-    float ortho_width = 200.0f; // Largura da visão da mesa
-    float aspect_ratio = swapChainExtent.width / (float)swapChainExtent.height;
-    ubo.proj = glm::ortho(-ortho_width * aspect_ratio / 2.0f,  // left
-                          ortho_width * aspect_ratio / 2.0f,  // right
-                          -ortho_width / 2.0f,                  // bottom
-                          ortho_width / 2.0f,                  // top
-                          0.1f,                               // near
-                          50.0f);                              // far
+    // Usa projeção de perspectiva para uma visualização 3D mais natural.
+    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 100.0f);
 
+    // O GLM foi projetado para o OpenGL, onde a coordenada Y do clip space é invertida.
+    // A linha a seguir corrige isso para o Vulkan.
     ubo.proj[1][1] *= -1;
+
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 

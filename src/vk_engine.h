@@ -103,7 +103,7 @@ class VulkanApplication {
     
     private:
 
-    const float MODEL_SCALE = 10.0f;
+    const float MODEL_SCALE = 1.0f;
 
     void initWindow();
     void initVulkan();
@@ -129,6 +129,7 @@ class VulkanApplication {
     void create_mesh_buffers(Mesh& mesh);  // cria buffers para uma malha
     void setup_scene();                   // cria lista de objetos da cena para renderizar
     void update_scene(float deltaTime);    // atualiza a posição dos objetos na cena a cada frame
+    void create_debug_axes();             // cria eixos de depuração para visualização
 
     void createUniformBuffers();
     void createDescriptorPool();
@@ -225,6 +226,11 @@ class VulkanApplication {
     
     glm::vec2 table_min_bounds;
     glm::vec2 table_max_bounds;
+
+    // Camera state for orbiting
+    float cameraYaw = glm::radians(45.0f);
+    float cameraPitch = glm::radians(45.0f);
+    float cameraDistance = 5.0f;
 };
 
 
