@@ -155,23 +155,34 @@ void VulkanApplication::initWindow() {
 
 void VulkanApplication::setupPoolTable() {
     balls.clear();
-    
-    balls.push_back({0, {0.0f, -0.5f}, {0.0f, 0.0f}, BALL_RADIUS, false});
-    
+
+    // Cue ball position: rotated 90 degrees and moved further away.
+    // Original was (0, -0.5), now it's effectively starting at (0, -0.8) and rotated.
+    glm::vec2 original_cue_pos = {0.0f, -0.8f}; // Increased distance
+    balls.push_back({0, {-original_cue_pos.y, original_cue_pos.x}, {0.0f, 0.0f}, BALL_RADIUS, false});
+
     int ball_id = 1;
-    float start_x = -0.1f;
-    float start_y = 0.3f;
+    float rack_start_x = 0.0f;
+    // This variable controls how far the racked balls are from the center (and the cue ball).
+    // A larger value moves the rack further away.
+    float rack_y_offset = 5.0f;
+
     for (int row = 0; row < 5; ++row) {
         for (int col = 0; col <= row; ++col) {
-            float x = start_x + col * (2.0f * BALL_RADIUS) - row * BALL_RADIUS;
-            float y = start_y + row * (2.0f * BALL_RADIUS * 0.866f);
-            balls.push_back({ball_id++, {x, y}, {0.0f, 0.0f}, BALL_RADIUS, false});
+            // Calculate original position in the triangle
+            float x = rack_start_x + col * (2.0f * BALL_RADIUS) - row * BALL_RADIUS;
+            float y = rack_y_offset + row * (2.0f * BALL_RADIUS * 0.866f);
+
+            // Rotate the position by 90 degrees (x,y -> -y,x)
+            glm::vec2 rotated_pos = {-y, x};
+            balls.push_back({ball_id++, rotated_pos, {0.0f, 0.0f}, BALL_RADIUS, false});
         }
     }
-    
-    cue.angle = 1.57f;
-    cue.power = 5.0f;
-    
+
+    // Rotate cue angle. Original was 1.57 (PI/2), new is 0 to shoot towards -X.
+    cue.angle = 0.0f;
+    cue.power = 8.0f;
+
     table_min_bounds = {-63.0f * BALL_RADIUS, -25.0f * BALL_RADIUS};
     table_max_bounds = {21.0f * BALL_RADIUS, 25.0f * BALL_RADIUS};
 }
