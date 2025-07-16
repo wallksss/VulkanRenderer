@@ -76,8 +76,6 @@ static std::vector<char> readFile(const std::string& filename) {
 namespace std {
     template<> struct hash<Vertex> {
         size_t operator()(Vertex const& vertex) const {
-            // Combina o hash da posição e da coordenada de textura.
-            // O operador << 1 (shift) ajuda a reduzir colisões de hash.
             size_t h1 = hash<glm::vec3>()(vertex.pos);
             size_t h2 = hash<glm::vec2>()(vertex.texCoord);
             return h1 ^ (h2 << 1);
@@ -97,18 +95,14 @@ void VulkanApplication::run() {
 void VulkanApplication::cleanup() {
     cleanupSwapChain();
     
-
-    
     for(size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroyBuffer(device, uniformBuffers[i], nullptr);
         vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
     }
 
-
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
     
-
     for (auto const& [name, mesh] : _meshes) {
         vkDestroyBuffer(device, mesh._vertexBuffer, nullptr);
         vkFreeMemory(device, mesh._vertexBufferMemory, nullptr);
@@ -116,11 +110,9 @@ void VulkanApplication::cleanup() {
         vkFreeMemory(device, mesh._indexBufferMemory, nullptr);
     }
 
-
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     vkDestroyRenderPass(device, renderPass, nullptr);
-    
     
     for(size_t i = 0; i < swapChainImages.size(); i++) {
         vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -148,7 +140,7 @@ void VulkanApplication::initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     
-    window = glfwCreateWindow(WIDTH, HEIGHT, "MARIO", nullptr, nullptr);
+    window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan Pool", nullptr, nullptr);
     glfwSetWindowUserPointer(window, this);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 }
@@ -156,30 +148,23 @@ void VulkanApplication::initWindow() {
 void VulkanApplication::setupPoolTable() {
     balls.clear();
 
-    // Cue ball position: rotated 90 degrees and moved further away.
-    // Original was (0, -0.5), now it's effectively starting at (0, -0.8) and rotated.
-    glm::vec2 original_cue_pos = {0.0f, -0.8f}; // Increased distance
-    balls.push_back({0, {-original_cue_pos.y, original_cue_pos.x}, {0.0f, 0.0f}, BALL_RADIUS, false});
+    glm::vec2 original_cue_pos = {0.0f, -0.8f};
+    balls.push_back({0, {-original_cue_pos.y, original_cue_pos.x}, {0.0f, 0.0f}, BALL_RADIUS, false, glm::quat(1.0f, 0.0f, 0.0f, 0.0f)});
 
     int ball_id = 1;
     float rack_start_x = 0.0f;
-    // This variable controls how far the racked balls are from the center (and the cue ball).
-    // A larger value moves the rack further away.
     float rack_y_offset = 5.0f;
 
     for (int row = 0; row < 5; ++row) {
         for (int col = 0; col <= row; ++col) {
-            // Calculate original position in the triangle
             float x = rack_start_x + col * (2.0f * BALL_RADIUS) - row * BALL_RADIUS;
             float y = rack_y_offset + row * (2.0f * BALL_RADIUS * 0.866f);
 
-            // Rotate the position by 90 degrees (x,y -> -y,x)
             glm::vec2 rotated_pos = {-y, x};
-            balls.push_back({ball_id++, rotated_pos, {0.0f, 0.0f}, BALL_RADIUS, false});
+            balls.push_back({ball_id++, rotated_pos, {0.0f, 0.0f}, BALL_RADIUS, false, glm::quat(1.0f, 0.0f, 0.0f, 0.0f)});
         }
     }
 
-    // Rotate cue angle. Original was 1.57 (PI/2), new is 0 to shoot towards -X.
     cue.angle = 0.0f;
     cue.power = 8.0f;
 
@@ -188,7 +173,6 @@ void VulkanApplication::setupPoolTable() {
 }
 
 void VulkanApplication::processInput(float deltaTime) {
-    // --- Camera Controls ---
     float rotationSpeed = 2.0f * deltaTime;
     float zoomSpeed = 5.0f * deltaTime;
 
@@ -211,13 +195,9 @@ void VulkanApplication::processInput(float deltaTime) {
         cameraDistance += zoomSpeed;
     }
 
-    // Clamp pitch to avoid flipping and gimbal lock
     cameraPitch = glm::clamp(cameraPitch, glm::radians(5.0f), glm::radians(85.0f));
-    // Clamp distance
     cameraDistance = glm::clamp(cameraDistance, 2.0f, 50.0f);
 
-
-    // --- Cue Controls (only if cue ball is not moving) ---
     if (balls[0].is_moving) return;
 
     float cueRotationSpeed = 2.0f * deltaTime;
@@ -231,7 +211,6 @@ void VulkanApplication::processInput(float deltaTime) {
     }
 
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
-        // Atirar!
         glm::vec2 direction = {-1 * glm::cos(cue.angle), glm::sin(cue.angle)};
         balls[0].velocity = direction * cue.power;
         balls[0].is_moving = true;
@@ -246,7 +225,15 @@ void VulkanApplication::updatePhysics(float deltaTime) {
     
     for (auto& ball : balls) {
         if (glm::length(ball.velocity) > 0.015f) {
-            ball.position += ball.velocity * deltaTime;
+            glm::vec2 displacement = ball.velocity * deltaTime;
+            ball.position += displacement;
+
+            float distance = glm::length(displacement);
+            glm::vec3 rotation_axis = glm::vec3(displacement.y, 0.0f, -displacement.x);
+            float rotation_angle = distance / ball.radius;
+
+            glm::quat rotation_delta = glm::angleAxis(rotation_angle, glm::normalize(rotation_axis));
+            ball.rotation = rotation_delta * ball.rotation;
             
             ball.velocity -= ball.velocity * friction * deltaTime;
             
@@ -262,53 +249,42 @@ void VulkanApplication::updatePhysics(float deltaTime) {
         balls[0].is_moving = false;
     }
     
-    // Lógica de Colisão
-    // 5.1: Colisão Bola-Parede
     for (size_t i = 0; i < balls.size(); ++i) {
         auto& ball = balls[i];
         if (ball.position.x - ball.radius < table_min_bounds.x) {
             if (i == 0) {
-                std::cout << "CUE BALL COLLISION: LEFT WALL\n";
-                std::cout << "  Ball Pos-Radius X: " << ball.position.x - ball.radius << "\n";
-                std::cout << "  Bound: " << table_min_bounds.x << "\n";
-                std::cout << "  Inverting X velocity.\n";
+                std::cout << "[DEBUG] Cue Ball Collision: Left Wall" << std::endl;
+                std::cout << "        Position X: " << ball.position.x - ball.radius << " | Boundary: " << table_min_bounds.x << std::endl;
             }
             ball.position.x = table_min_bounds.x + ball.radius;
-            ball.velocity.x *= -1; // Inverte velocidade no eixo X
+            ball.velocity.x *= -1;
         }
         if (ball.position.x + ball.radius > table_max_bounds.x) {
             if (i == 0) {
-                std::cout << "CUE BALL COLLISION: RIGHT WALL\n";
-                std::cout << "  Ball Pos+Radius X: " << ball.position.x + ball.radius << "\n";
-                std::cout << "  Bound: " << table_max_bounds.x << "\n";
-                std::cout << "  Inverting X velocity.\n";
+                std::cout << "[DEBUG] Cue Ball Collision: Right Wall" << std::endl;
+                std::cout << "        Position X: " << ball.position.x + ball.radius << " | Boundary: " << table_max_bounds.x << std::endl;
             }
             ball.position.x = table_max_bounds.x - ball.radius;
             ball.velocity.x *= -1;
         }
         if (ball.position.y - ball.radius < table_min_bounds.y) {
             if (i == 0) {
-                std::cout << "CUE BALL COLLISION: BOTTOM WALL\n";
-                std::cout << "  Ball Pos-Radius Y: " << ball.position.y - ball.radius << "\n";
-                std::cout << "  Bound: " << table_min_bounds.y << "\n";
-                std::cout << "  Inverting Y velocity.\n";
+                std::cout << "[DEBUG] Cue Ball Collision: Bottom Wall" << std::endl;
+                std::cout << "        Position Y: " << ball.position.y - ball.radius << " | Boundary: " << table_min_bounds.y << std::endl;
             }
             ball.position.y = table_min_bounds.y + ball.radius;
-            ball.velocity.y *= -1; // Inverte velocidade no eixo Y
+            ball.velocity.y *= -1;
         }
         if (ball.position.y + ball.radius > table_max_bounds.y) {
             if (i == 0) {
-                std::cout << "CUE BALL COLLISION: TOP WALL\n";
-                std::cout << "  Ball Pos+Radius Y: " << ball.position.y + ball.radius << "\n";
-                std::cout << "  Bound: " << table_max_bounds.y << "\n";
-                std::cout << "  Inverting Y velocity.\n";
+                std::cout << "[DEBUG] Cue Ball Collision: Top Wall" << std::endl;
+                std::cout << "        Position Y: " << ball.position.y + ball.radius << " | Boundary: " << table_max_bounds.y << std::endl;
             }
             ball.position.y = table_max_bounds.y - ball.radius;
             ball.velocity.y *= -1;
         }
     }
     
-    // 5.2: Colisão Bola-Bola
     for (size_t i = 0; i < balls.size(); ++i) {
         for (size_t j = i + 1; j < balls.size(); ++j) {
             PoolBall& b1 = balls[i];
@@ -319,17 +295,13 @@ void VulkanApplication::updatePhysics(float deltaTime) {
             float min_dist = b1.radius + b2.radius;
             
             if (dist_sq < min_dist * min_dist) {
-                // Colisão detectada!
                 float dist = sqrt(dist_sq);
                 glm::vec2 normal = (dist > 0) ? delta / dist : glm::vec2(1, 0);
                 
-                // Separa as bolas para evitar que fiquem presas
                 float overlap = min_dist - dist;
                 b1.position -= normal * (overlap / 2.0f);
                 b2.position += normal * (overlap / 2.0f);
                 
-                // Resposta à colisão (física de colisão elástica 2D)
-                // Assumindo que todas as bolas têm a mesma massa
                 glm::vec2 tangent = {-normal.y, normal.x};
                 
                 float v1n = glm::dot(b1.velocity, normal);
@@ -337,8 +309,6 @@ void VulkanApplication::updatePhysics(float deltaTime) {
                 float v2n = glm::dot(b2.velocity, normal);
                 float v2t = glm::dot(b2.velocity, tangent);
                 
-                // As velocidades tangenciais não mudam
-                // As velocidades normais trocam entre si
                 b1.velocity = tangent * v1t + normal * v2n;
                 b2.velocity = tangent * v2t + normal * v1n;
                 
@@ -349,37 +319,27 @@ void VulkanApplication::updatePhysics(float deltaTime) {
     }
 }
 
-// recebe uma mesh e cria seus buffers VkBuffers na GPU, usada para enviar uma nova malha para a GPU
 void VulkanApplication::create_mesh_buffers(Mesh& mesh) {
-    // --------- Processo de criar buffer para os vertices --------- //
-    //cria o buffer de vertices
     VkDeviceSize vertexBufferSize = sizeof(mesh._vertices[0]) * mesh._vertices.size();
 
-    //buffer de staging, "preparação", na memória acessível pela GPU
     VkBuffer vertexStagingBuffer;
     VkDeviceMemory vertexStagingBufferMemory;
     createBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                  vertexStagingBuffer, vertexStagingBufferMemory);
 
-    //copia dados dos vértices para buffer staging
     void* data;
     vkMapMemory(device, vertexStagingBufferMemory, 0, vertexBufferSize, 0, &data);
     memcpy(data, mesh._vertices.data(), (size_t)vertexBufferSize);
     vkUnmapMemory(device, vertexStagingBufferMemory);
 
-    //cria buffer na memória da GPU
     createBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                  mesh._vertexBuffer, mesh._vertexBufferMemory);
 
-    //faz o buffer da GPU copiar os dados do buffer de staging
     copyBuffer(vertexStagingBuffer, mesh._vertexBuffer, vertexBufferSize);
 
-    // limpa o buffer de preparação
     vkDestroyBuffer (device, vertexStagingBuffer, nullptr);
     vkFreeMemory(device, vertexStagingBufferMemory, nullptr);
 
-    // --------- processo de criar buffer para os indices, o processo é igual --------- //
-    //cria o buffer de indices
     VkDeviceSize indexBufferSize = sizeof(mesh._indices[0]) * mesh._indices.size();
     VkBuffer indexStagingBuffer;
     VkDeviceMemory indexStagingBufferMemory;
@@ -397,25 +357,18 @@ void VulkanApplication::create_mesh_buffers(Mesh& mesh) {
 
 }
 
-// le os arquivos .obj e .mtl e preeche os mapas _meshes e _materials
-// Em vk_engine.cpp
-
-// le os arquivos .obj e .mtl e preeche os mapas _meshes e _materials
-// ADICIONAR (Substitua a função inteira)
 void VulkanApplication::load_model(const char* filename) {
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    // The material files are in the "textures" directory
     const char* mtl_basedir = "textures/";
 
     if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename, mtl_basedir, true)) {
         throw std::runtime_error(warn + err);
     }
 
-    // Carrega os materiais e coloca no mapa _materials
     for (const auto& mat : materials) {
         if (_materials.find(mat.name) == _materials.end()) {
             Material newMaterial;
@@ -423,12 +376,10 @@ void VulkanApplication::load_model(const char* filename) {
             _materials[mat.name] = newMaterial;
         }
     }
-    // Adiciona um material padrão para objetos que não têm um
     if (_materials.find("Default") == _materials.end()) {
         _materials["Default"] = Material{};
     }
 
-    // Itera sobre cada shape (objeto) no arquivo .obj
     for (const auto& shape : shapes) {
         if (_meshes.count(shape.name)) continue;
 
@@ -452,7 +403,7 @@ void VulkanApplication::load_model(const char* filename) {
             if (index.texcoord_index >= 0) {
                 vertex.texCoord = {
                     attrib.texcoords[2 * index.texcoord_index + 0],
-                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1] // Vulkan inverte o eixo Y da textura
+                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
                 };
             }
 
@@ -489,25 +440,20 @@ void VulkanApplication::load_model(const char* filename) {
         _meshes[shape.name] = newMesh;
     }
 }
-// Em vk_engine.cpp
 
-// NOVA STRUCT: Um "manifesto" que descreve o asset de um objeto.
 struct AssetInfo {
-    std::string objFilePath;      // Ex: "models/amarela1.obj"
-    std::string meshNameInObj;    // Ex: "all_balls.007" (o nome depois do 'o' no .obj)
+    std::string objFilePath;
+    std::string meshNameInObj;
 };
 
 void VulkanApplication::setup_scene() {
-    std::cout << "Iniciando setup_scene..." << std::endl;
+    std::cout << "[INFO] Setting up scene..." << std::endl;
 
-    // ... (código do assetInfoMap continua o mesmo) ...
     std::unordered_map<std::string, AssetInfo> assetInfoMap = {
-        // Objetos Estáticos
         {"table",     {"models/pooltable.obj", "PoolTable"}},
         {"stick",     {"models/poolstick.obj", "PoolStick"}},
         {"lamp",      {"models/luz.obj",       "Light_Ceiling1"}},
 
-        // Bolas de Bilhar - o nome da chave (ex: "ball_0") é a nossa referência interna.
         {"ball_0",    {"models/cueball.obj",   "cue_ball"}},
         {"ball_1",    {"models/amarela1.obj",  "all_balls.007"}},
         {"ball_2",    {"models/amarela2.obj",  "all_balls.012"}},
@@ -526,49 +472,44 @@ void VulkanApplication::setup_scene() {
         {"ball_15",   {"models/vinho2.obj",    "all_balls.014"}}
     };
 
-    std::cout << "Carregando modelos..." << std::endl;
+    std::cout << "[INFO] Loading models..." << std::endl;
     std::set<std::string> loadedFiles;
     for (const auto& pair : assetInfoMap) {
         const AssetInfo& assetInfo = pair.second;
         if (loadedFiles.find(assetInfo.objFilePath) == loadedFiles.end()) {
-            std::cout << "  Carregando arquivo: " << assetInfo.objFilePath << std::endl;
+            std::cout << "       - Loading file: " << assetInfo.objFilePath << std::endl;
             load_model(assetInfo.objFilePath.c_str());
             loadedFiles.insert(assetInfo.objFilePath);
         }
     }
-    std::cout << "Modelos carregados. Total de malhas no mapa _meshes: " << _meshes.size() << std::endl;
+    std::cout << "[INFO] Models loaded. Total meshes: " << _meshes.size() << std::endl;
 
     _staticRenderables.clear();
     _dynamicRenderables.clear();
 
     glm::vec3 scale_vector(MODEL_SCALE);
 
-    // MESA
     RenderObject table_object;
     table_object.meshName = assetInfoMap["table"].meshNameInObj;
     if (_meshes.find(table_object.meshName) == _meshes.end()) {
-         std::cerr << "ERRO: Malha da mesa '" << table_object.meshName << "' nao encontrada!" << std::endl;
+         std::cerr << "[ERROR] Table mesh not found: " << table_object.meshName << std::endl;
     }
     glm::mat4 table_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
     glm::mat4 table_scale = glm::scale(glm::mat4(1.0f), scale_vector);
     table_object.transformMatrix = table_translation * table_scale;
     _staticRenderables.push_back(table_object);
 
-    // LÂMPADA
     RenderObject lamp_object;
     lamp_object.meshName = assetInfoMap["lamp"].meshNameInObj;
     if (_meshes.find(lamp_object.meshName) == _meshes.end()) {
-         std::cerr << "ERRO: Malha da lampada '" << lamp_object.meshName << "' nao encontrada!" << std::endl;
+         std::cerr << "[ERROR] Lamp mesh not found: " << lamp_object.meshName << std::endl;
     }
-    // Posiciona a lâmpada acima da mesa
     glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 10.0f, 0.0f));
     glm::mat4 lamp_scale = glm::scale(glm::mat4(1.0f), scale_vector);
     lamp_object.transformMatrix = lamp_translation * lamp_scale;
     _staticRenderables.push_back(lamp_object);
-    std::cout << "Renderizaveis estaticos adicionados." << std::endl;
+    std::cout << "[INFO] Static renderables added." << std::endl;
 
-
-    // Adicionar Bolas
     for (const auto& ball_data : balls) {
         RenderObject ball_object;
         std::string ball_key = "ball_" + std::to_string(ball_data.id);
@@ -577,37 +518,34 @@ void VulkanApplication::setup_scene() {
         if (it != assetInfoMap.end()) {
             ball_object.meshName = it->second.meshNameInObj;
             if (_meshes.find(ball_object.meshName) == _meshes.end()) {
-                 std::cerr << "ERRO: Malha da bola '" << ball_object.meshName << "' (key: " << ball_key << ") nao encontrada!" << std::endl;
-                 continue; // Pula esta bola se a malha não existe
+                 std::cerr << "[ERROR] Ball mesh not found: " << ball_object.meshName << " (key: " << ball_key << ")" << std::endl;
+                 continue;
             }
             ball_object.transformMatrix = glm::scale(glm::mat4(1.0f), scale_vector);
             _dynamicRenderables.push_back(ball_object);
         } else {
-            std::cerr << "ERRO: Informacao de asset para '" << ball_key << "' nao encontrada no assetInfoMap!" << std::endl;
+            std::cerr << "[ERROR] Asset info for '" << ball_key << "' not found!" << std::endl;
         }
     }
-    std::cout << "Renderizaveis de bolas adicionados. Total: " << _dynamicRenderables.size() << std::endl;
+    std::cout << "[INFO] Ball renderables added. Total: " << _dynamicRenderables.size() << std::endl;
 
-
-    // Adicionar Taco
     RenderObject cue_object;
     auto stick_it = assetInfoMap.find("stick");
     if (stick_it != assetInfoMap.end()) {
         cue_object.meshName = stick_it->second.meshNameInObj;
         if (_meshes.find(cue_object.meshName) == _meshes.end()) {
-            std::cerr << "ERRO: Malha do taco '" << cue_object.meshName << "' nao encontrada!" << std::endl;
+            std::cerr << "[ERROR] Cue stick mesh not found: " << cue_object.meshName << std::endl;
         } else {
             cue_object.transformMatrix = glm::scale(glm::mat4(1.0f), scale_vector);
             _dynamicRenderables.push_back(cue_object);
-            std::cout << "Renderizavel do taco adicionado." << std::endl;
+            std::cout << "[INFO] Cue stick renderable added." << std::endl;
         }
     }
 
-    std::cout << "setup_scene concluido. Total de renderizaveis dinamicos: " << _dynamicRenderables.size() << ". Total de bolas na fisica: " << balls.size() << std::endl;
+    std::cout << "[INFO] Scene setup complete. Dynamic renderables: " << _dynamicRenderables.size() << " | Physics balls: " << balls.size() << std::endl;
 }
 
 void VulkanApplication::create_debug_axes() {
-    // 1. Create materials for the axes
     _materials["debug_red"] = Material{{0.8f, 0.1f, 0.1f}};
     _materials["debug_green"] = Material{{0.1f, 0.8f, 0.1f}};
     _materials["debug_blue"] = Material{{0.1f, 0.1f, 0.8f}};
@@ -615,7 +553,6 @@ void VulkanApplication::create_debug_axes() {
     const float length = 1.5f;
     const float width = 0.05f;
 
-    // --- Create X-Axis Mesh (Red) ---
     {
         Mesh xAxisMesh;
         xAxisMesh._vertices.push_back({{0, -width, 0}, {0,0}});
@@ -639,7 +576,6 @@ void VulkanApplication::create_debug_axes() {
         _staticRenderables.push_back(axis_x_object);
     }
 
-    // --- Create Y-Axis Mesh (Green) ---
     {
         Mesh yAxisMesh;
         yAxisMesh._vertices.push_back({{-width, 0, 0}, {0,0}});
@@ -663,7 +599,6 @@ void VulkanApplication::create_debug_axes() {
         _staticRenderables.push_back(axis_y_object);
     }
 
-    // --- Create Z-Axis Mesh (Blue) ---
     {
         Mesh zAxisMesh;
         zAxisMesh._vertices.push_back({{-width, 0, 0}, {0,0}});
@@ -692,7 +627,6 @@ void VulkanApplication::draw_debug_vertical_line(glm::vec2 xz_pos, float height,
     const float width = 0.02f;
 
     Mesh lineMesh;
-    // A quad parallel to the Y axis, facing Z.
     lineMesh._vertices.push_back({{xz_pos.x - width, 0.0f, xz_pos.y}, {0,0}});
     lineMesh._vertices.push_back({{xz_pos.x + width, 0.0f, xz_pos.y}, {0,0}});
     lineMesh._vertices.push_back({{xz_pos.x + width, height, xz_pos.y}, {0,0}});
@@ -715,32 +649,24 @@ void VulkanApplication::draw_debug_vertical_line(glm::vec2 xz_pos, float height,
 }
 
 void VulkanApplication::create_debug_bounds_lines() {
-    // Create a material for the debug lines
     _materials["debug_white"] = Material{{1.0f, 1.0f, 1.0f}};
 
-    const float lineHeight = 2.0f; // Arbitrary height
+    const float lineHeight = 2.0f;
 
-    // Get the 4 corner points
     glm::vec2 min = table_min_bounds;
     glm::vec2 max = table_max_bounds;
 
-    glm::vec2 p1 = {min.x, min.y}; // bottom-left
-    glm::vec2 p2 = {max.x, min.y}; // bottom-right
-    glm::vec2 p3 = {max.x, max.y}; // top-right
-    glm::vec2 p4 = {min.x, max.y}; // top-left
+    glm::vec2 p1 = {min.x, min.y};
+    glm::vec2 p2 = {max.x, min.y};
+    glm::vec2 p3 = {max.x, max.y};
+    glm::vec2 p4 = {min.x, max.y};
 
-    // Draw the 4 lines
     draw_debug_vertical_line(p1, lineHeight, "debug_line_1", "debug_white");
     draw_debug_vertical_line(p2, lineHeight, "debug_line_2", "debug_white");
     draw_debug_vertical_line(p3, lineHeight, "debug_line_3", "debug_white");
     draw_debug_vertical_line(p4, lineHeight, "debug_line_4", "debug_white");
 }
 
-// Em vk_engine.cpp
-
-// Em vk_engine.cpp
-
-// ADICIONAR (Substitua a função update_scene inteira)
 void VulkanApplication::update_scene(float deltaTime) {
     glm::vec3 scale_vector(MODEL_SCALE);
     glm::mat4 y_to_z_up_rotation = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -749,95 +675,84 @@ void VulkanApplication::update_scene(float deltaTime) {
         return;
     }
 
-    // Atualiza as bolas
     for (size_t i = 0; i < balls.size(); ++i) {
         const PoolBall& ball_phys = balls[i];
         RenderObject& ball_renderable = _dynamicRenderables[i];
 
         glm::vec3 ball_position_3d = glm::vec3(ball_phys.position.x, BALL_RADIUS, ball_phys.position.y);
         glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), ball_position_3d);
+        glm::mat4 rotation_matrix = glm::mat4_cast(ball_phys.rotation);
         glm::mat4 scale_matrix = glm::scale(glm::mat4(1.0f), scale_vector);
-        // As bolas são esferas, então a rotação do eixo não é necessária para elas.
-        ball_renderable.transformMatrix = translation_matrix * scale_matrix;
+        ball_renderable.transformMatrix = translation_matrix * rotation_matrix * scale_matrix;
     }
 
-    // Atualiza o taco
     RenderObject& cue_renderable = _dynamicRenderables.back();
 
     if (!balls[0].is_moving) {
         const PoolBall& cue_ball_phys = balls[0];
         glm::vec3 cue_ball_pos_3d = glm::vec3(cue_ball_phys.position.x, BALL_RADIUS, cue_ball_phys.position.y);
 
-        // 1. Começa com a escala e a rotação de correção do eixo do modelo.
         glm::mat4 scale_matrix = glm::scale(glm::mat4(1.0f), scale_vector);
         glm::mat4 base_transform = y_to_z_up_rotation * scale_matrix;
 
-        // 2. Define a rotação do taco em torno do eixo Y (para cima).
         glm::mat4 gameplay_rotation = glm::rotate(glm::mat4(1.0f), cue.angle, glm::vec3(0.0f, 1.0f, 0.0f));
 
-        // 3. Translada o taco para a posição da bola branca.
         glm::mat4 translation_to_ball = glm::translate(glm::mat4(1.0f), cue_ball_pos_3d);
 
-        // 4. Compõe a matriz final: move para a bola, gira, e então aplica a transformação base do modelo.
-        // Isso faz com que o taco gire em torno da bola branca.
         cue_renderable.transformMatrix = translation_to_ball * gameplay_rotation * base_transform;
 
     } else {
-        // Move o taco para fora da tela quando não está em uso.
         cue_renderable.transformMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(100.0f));
     }
 }
 
-// ADICIONAR (Substitua a função initVulkan inteira)
 void VulkanApplication::initVulkan() {
-    std::cout << "Iniciando initVulkan..." << std::endl;
+    std::cout << "[INFO] Initializing Vulkan..." << std::endl;
     createInstance();
-    std::cout << "  [OK] createInstance" << std::endl;
+    std::cout << "       - Instance created." << std::endl;
     setupDebugMessenger();
-    std::cout << "  [OK] setupDebugMessenger" << std::endl;
+    std::cout << "       - Debug messenger set up." << std::endl;
     createSurface();
-    std::cout << "  [OK] createSurface" << std::endl;
+    std::cout << "       - Surface created." << std::endl;
     pickPhysicalDevice();
-    std::cout << "  [OK] pickPhysicalDevice" << std::endl;
+    std::cout << "       - Physical device picked." << std::endl;
     createLogicalDevice();
-    std::cout << "  [OK] createLogicalDevice" << std::endl;
+    std::cout << "       - Logical device created." << std::endl;
     createSwapChain();
-    std::cout << "  [OK] createSwapChain" << std::endl;
+    std::cout << "       - Swap chain created." << std::endl;
     createImageViews();
-    std::cout << "  [OK] createImageViews" << std::endl;
+    std::cout << "       - Image views created." << std::endl;
     createRenderPass();
-    std::cout << "  [OK] createRenderPass" << std::endl;
+    std::cout << "       - Render pass created." << std::endl;
     createDescriptorSetLayout();
-    std::cout << "  [OK] createDescriptorSetLayout" << std::endl;
+    std::cout << "       - Descriptor set layout created." << std::endl;
     createGraphicsPipeline();
-    std::cout << "  [OK] createGraphicsPipeline" << std::endl;
+    std::cout << "       - Graphics pipeline created." << std::endl;
     createCommandPool();
-    std::cout << "  [OK] createCommandPool" << std::endl;
+    std::cout << "       - Command pool created." << std::endl;
     createDepthResources();
-    std::cout << "  [OK] createDepthResources" << std::endl;
+    std::cout << "       - Depth resources created." << std::endl;
     createFramebuffers();
-    std::cout << "  [OK] createFramebuffers" << std::endl;
+    std::cout << "       - Framebuffers created." << std::endl;
 
     _materials["default"] = Material();
-    std::cout << "  [OK] Material padrao criado" << std::endl;
+    std::cout << "       - Default material created." << std::endl;
     setupPoolTable();
-    std::cout << "  [OK] setupPoolTable" << std::endl;
-    setup_scene(); // Já temos logs dentro desta
-    // create_debug_bounds_lines();
-    // create_debug_axes(); // Adiciona os eixos de depuração
-    std::cout << "  [OK] setup_scene" << std::endl;
+    std::cout << "       - Pool table set up." << std::endl;
+    setup_scene();
+    std::cout << "       - Scene set up." << std::endl;
 
     createUniformBuffers();
-    std::cout << "  [OK] createUniformBuffers" << std::endl;
+    std::cout << "       - Uniform buffers created." << std::endl;
     createDescriptorPool();
-    std::cout << "  [OK] createDescriptorPool" << std::endl;
+    std::cout << "       - Descriptor pool created." << std::endl;
     createDescriptorSets();
-    std::cout << "  [OK] createDescriptorSets" << std::endl;
+    std::cout << "       - Descriptor sets created." << std::endl;
     createCommandBuffer();
-    std::cout << "  [OK] createCommandBuffer" << std::endl;
+    std::cout << "       - Command buffer created." << std::endl;
     createSyncObjects();
-    std::cout << "  [OK] createSyncObjects" << std::endl;
-    std::cout << "initVulkan concluido com sucesso." << std::endl;
+    std::cout << "       - Sync objects created." << std::endl;
+    std::cout << "[INFO] Vulkan initialized successfully." << std::endl;
 }
 void VulkanApplication::mainLoop(){
     static auto lastTime = std::chrono::high_resolution_clock::now();
@@ -849,7 +764,6 @@ void VulkanApplication::mainLoop(){
         float deltaTime = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime).count();
         lastTime = currentTime;
         
-        // Limita o deltaTime para evitar "espiral da morte" na física
         if (deltaTime > 0.05f) {
             deltaTime = 0.05f;
         }
@@ -884,10 +798,6 @@ void VulkanApplication::createInstance() {
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
     std::vector<VkExtensionProperties> extensions(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
-    std::cout << "available extensions:\n";
-    for(const auto& extension : extensions) {
-        std::cout << "\t" << extension.extensionName << "\n";
-    }
     
     auto required_extensions = getRequiredExtensions();
     createInfo.enabledExtensionCount = static_cast<uint32_t>(required_extensions.size());
@@ -993,8 +903,6 @@ void VulkanApplication::createLogicalDevice() {
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 }
 
-//// ADICIONAR (Substitua a função createSwapChain inteira pela ÚLTIMA vez)
-// ADICIONAR (Substitua a função createSwapChain pela versão CORRIGIDA)
 void VulkanApplication::createSwapChain() {
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 
@@ -1020,18 +928,15 @@ void VulkanApplication::createSwapChain() {
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
     uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value()};
 
-    // ================== INÍCIO DA CORREÇÃO ==================
     if (indices.graphicsFamily != indices.presentFamily) {
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndices;
     } else {
         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        // Definindo explicitamente os valores para 0 e nullptr por segurança.
         createInfo.queueFamilyIndexCount = 0;
         createInfo.pQueueFamilyIndices = nullptr;
     }
-    // ================== FIM DA CORREÇÃO ==================
 
     createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -1050,36 +955,21 @@ void VulkanApplication::createSwapChain() {
     swapChainImageFormat = surfaceFormat.format;
     swapChainExtent = extent;
 }
-// ADICIONAR (Substitua a função createImageViews inteira)
+
 void VulkanApplication::createImageViews() {
     swapChainImageViews.resize(swapChainImages.size());
 
-    // Log para verificar os dados antes do loop
-    std::cout << "  Iniciando createImageViews..." << std::endl;
-    std::cout << "    - Numero de imagens da swapchain: " << swapChainImages.size() << std::endl;
-    std::cout << "    - Formato da imagem da swapchain: " << swapChainImageFormat << std::endl;
-
-    // Verificação de segurança crucial
     if (swapChainImages.empty()) {
-        std::cerr << "    ERRO CRITICO: O vetor swapChainImages esta vazio!" << std::endl;
-        throw std::runtime_error("Nao ha imagens na swapchain para criar image views.");
+        throw std::runtime_error("Swap chain images are empty!");
     }
 
     for(uint32_t i = 0; i < swapChainImages.size(); i++) {
-        // Log para cada iteração do loop
-        std::cout << "    - Processando imagem [" << i << "]: Handle = " << swapChainImages[i] << std::endl;
-
-        // Verificação de segurança para o handle individual
         if (swapChainImages[i] == VK_NULL_HANDLE) {
-            std::cerr << "    ERRO CRITICO: O handle da imagem [" << i << "] e VK_NULL_HANDLE!" << std::endl;
-            throw std::runtime_error("Handle de imagem invalido na swapchain.");
+            throw std::runtime_error("Invalid image handle in swap chain.");
         }
 
         swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
-
-        std::cout << "    - Image view para imagem [" << i << "] criada com sucesso." << std::endl;
     }
-    std::cout << "  createImageViews concluido." << std::endl;
 }
 
 void VulkanApplication::createRenderPass() {
@@ -1146,7 +1036,7 @@ void VulkanApplication::createDescriptorSetLayout() {
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1; // Apenas 1 binding.
+    layoutInfo.bindingCount = 1;
     layoutInfo.pBindings = &uboLayoutBinding;
 
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
@@ -1154,7 +1044,6 @@ void VulkanApplication::createDescriptorSetLayout() {
     }
 }
 
-// ADICIONAR (Substitua a função createGraphicsPipeline inteira)
 void VulkanApplication::createGraphicsPipeline() {
     auto vertShaderCode = readFile("shaders/vert.spv");
     auto fragShaderCode = readFile("shaders/frag.spv");
@@ -1162,41 +1051,33 @@ void VulkanApplication::createGraphicsPipeline() {
     VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
-    // Etapa 1: Estágios do Shader
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, vertShaderModule);
     VkPipelineShaderStageCreateInfo fragShaderStageInfo = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderModule);
     VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
-    // Etapa 2: Entrada de Vértice (Preenchida diretamente aqui para segurança)
     auto bindingDescription = Vertex::getBindingDescription();
     auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription; // Aponta para var local, seguro dentro desta função.
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
     vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data(); // Aponta para var local, seguro.
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
-    // Etapa 3: Montagem de Entrada
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = vkinit::input_assembly_create_info(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
-    // Etapa 4: Viewport e Scissor (Estado Dinâmico)
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewportState.viewportCount = 1;
     viewportState.scissorCount = 1;
 
-    // Etapa 5: Rasterização
     VkPipelineRasterizationStateCreateInfo rasterizer = vkinit::rasterization_state_create_info(VK_POLYGON_MODE_FILL);
 
-    // Etapa 6: Multisampling
     VkPipelineMultisampleStateCreateInfo multisampling = vkinit::multisampling_state_create_info();
 
-    // Etapa 7: Teste de Profundidade e Stencil
     VkPipelineDepthStencilStateCreateInfo depthStencil = vkinit::depth_stencil_create_info(true, true, VK_COMPARE_OP_LESS);
 
-    // Etapa 8: Mesclagem de Cor
     VkPipelineColorBlendAttachmentState colorBlendAttachment = vkinit::color_blend_attachment_state();
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -1204,14 +1085,12 @@ void VulkanApplication::createGraphicsPipeline() {
     colorBlending.attachmentCount = 1;
     colorBlending.pAttachments = &colorBlendAttachment;
 
-    // Etapa 9: Estado Dinâmico
     std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
     VkPipelineDynamicStateCreateInfo dynamicState{};
     dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
-    // Etapa 10: Layout do Pipeline (Preenchido diretamente aqui para segurança)
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstantRange.offset = 0;
@@ -1220,7 +1099,7 @@ void VulkanApplication::createGraphicsPipeline() {
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout; // Aponta para membro da classe, seguro.
+    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
     pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
@@ -1228,7 +1107,6 @@ void VulkanApplication::createGraphicsPipeline() {
         throw std::runtime_error("failed to create pipeline layout!");
     }
 
-    // Etapa Final: Criação do Pipeline
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineInfo.stageCount = 2;
@@ -1249,7 +1127,6 @@ void VulkanApplication::createGraphicsPipeline() {
         throw std::runtime_error("failed to create graphics pipeline.");
     }
 
-    // Limpeza
     vkDestroyShaderModule(device, fragShaderModule, nullptr);
     vkDestroyShaderModule(device, vertShaderModule, nullptr);
 }
@@ -1301,9 +1178,7 @@ void VulkanApplication::createUniformBuffers() {
     }
 }
 
-// E também o Descriptor Pool
 void VulkanApplication::createDescriptorPool() {
-    // Apenas um tipo de pool por enquanto.
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
@@ -1338,7 +1213,6 @@ void VulkanApplication::createDescriptorSets() {
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObject);
 
-        // CORREÇÃO: Removido o descriptor de imagem por enquanto.
         VkWriteDescriptorSet descriptorWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptorSets[i], &bufferInfo, 0);
 
         vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
@@ -1441,32 +1315,22 @@ void VulkanApplication::updateUniformBuffer(uint32_t currentImage) {
 
     glm::vec3 lookAtTarget = glm::vec3(0.0f, 0.0f, 0.0f);
 
-    // Calculate camera position based on yaw, pitch, and distance (orbiting camera)
     glm::vec3 cameraPos;
     cameraPos.x = lookAtTarget.x + cameraDistance * cos(cameraPitch) * cos(cameraYaw);
     cameraPos.y = lookAtTarget.y + cameraDistance * sin(cameraPitch);
     cameraPos.z = lookAtTarget.z + cameraDistance * cos(cameraPitch) * sin(cameraYaw);
 
-    // O vetor "para cima" da câmera agora é o eixo Y do mundo.
-    // Isso estabiliza a câmera e evita o gimbal lock ao olhar diretamente para baixo do eixo Z.
     glm::vec3 upVector = glm::vec3(0.0f, 1.0f, 0.0f);
 
     ubo.view = glm::lookAt(cameraPos, lookAtTarget, upVector);
 
-    // Usa projeção de perspectiva para uma visualização 3D mais natural.
     ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 100.0f);
 
-    // O GLM foi projetado para o OpenGL, onde a coordenada Y do clip space é invertida.
-    // A linha a seguir corrige isso para o Vulkan.
     ubo.proj[1][1] *= -1;
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 
-// Em vk_engine.cpp
-// Em vk_engine.cpp
-
-// CONFIRMAR (Sua função recordCommandBuffer já está correta para a nova lógica)
 void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     VkCommandBufferBeginInfo beginInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
@@ -1474,7 +1338,6 @@ void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint3
         throw std::runtime_error("failed to begin recording command buffer.");
     }
 
-    // Inicia o Render Pass
     std::array<VkClearValue, 2> clearValues{};
     clearValues[0].color = {{0.0f, 0.05f, 0.1f, 1.0f}};
     clearValues[1].depthStencil = {1.0f, 0};
@@ -1485,11 +1348,9 @@ void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint3
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    // Binda o pipeline e o descriptor set (view/proj) uma vez para o frame
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-    // Configura o estado dinâmico
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -1504,7 +1365,6 @@ void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint3
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    // Função auxiliar para desenhar uma lista de Renderables
     auto draw_renderables = [&](const std::vector<RenderObject>& renderables) {
         for (const auto& renderable : renderables) {
             auto mesh_it = _meshes.find(renderable.meshName);
@@ -1518,34 +1378,27 @@ void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint3
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
             vkCmdBindIndexBuffer(commandBuffer, mesh._indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-            // A MÁGICA ACONTECE AQUI: Itera sobre cada SubMesh
             for (const auto& submesh : mesh._subMeshes) {
-                // Encontra o material para esta SubMesh
                 auto mat_it = _materials.find(submesh.materialName);
                 if (mat_it == _materials.end()) {
                     mat_it = _materials.find("Default");
                 }
                 const Material& material = mat_it->second;
 
-                // Prepara os dados do Push Constant (matriz e cor)
                 GPUDrawPushConstants pushConstants;
                 pushConstants.transform = renderable.transformMatrix;
                 pushConstants.color = glm::vec4(material.color, 1.0f);
 
-                // Envia os dados para o shader
                 vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 
-                // Emite a chamada de desenho PARA ESTA SUBMESH
                 vkCmdDrawIndexed(commandBuffer, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
             }
         }
     };
 
-    // Desenha os objetos estáticos e dinâmicos
     draw_renderables(_staticRenderables);
     draw_renderables(_dynamicRenderables);
 
-    // Finaliza
     vkCmdEndRenderPass(commandBuffer);
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
         throw std::runtime_error("failed to record command buffer.");
@@ -1961,7 +1814,7 @@ void VulkanApplication::framebufferResizeCallback(GLFWwindow* window, int width,
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL VulkanApplication::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+    std::cerr << "[VULKAN VALIDATION]: " << pCallbackData->pMessage << std::endl;
     
     return VK_FALSE;
 }

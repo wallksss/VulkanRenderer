@@ -8,18 +8,13 @@ struct Vertex {
   glm::vec3 pos;
   glm::vec2 texCoord;
 
+  // Returns the binding description for a vertex.
   static VkVertexInputBindingDescription getBindingDescription();
   
+  // Returns the attribute descriptions for a vertex.
   static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
 
   bool operator==(const Vertex& other) const {
     return pos == other.pos && texCoord == other.texCoord;
   }
 };
-//struct Mesh {
-//  std::vector<Vertex> vertices;
-
-//  AllocatedBuffer vertexBuffer;
-
-//  bool load_from_obj(const char* filename);
-//}
