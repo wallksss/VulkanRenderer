@@ -62,6 +62,14 @@ struct Material {
 	glm::vec3 color{1.0f, 1.0f, 1.0f};
 };
 
+// Representa uma única chamada de desenho dentro de uma malha maior.
+// Contém a informação de qual parte do buffer de índices usar e com qual material.
+struct SubMesh {
+    std::string materialName;
+    uint32_t indexCount;
+    uint32_t firstIndex; // O offset para o primeiro índice desta sub-malha no buffer de índices principal
+};
+
 // associa a geometria com os seus identificadores no buffer da GPU
 struct Mesh {
     std::vector<Vertex> _vertices;
@@ -70,16 +78,22 @@ struct Mesh {
     VkDeviceMemory _vertexBufferMemory{VK_NULL_HANDLE};
     VkBuffer _indexBuffer{VK_NULL_HANDLE};
     VkDeviceMemory _indexBufferMemory{VK_NULL_HANDLE};
+    // Lista de partes desenháveis, divide a mesh em materiais
+    std::vector<SubMesh> _subMeshes;
 };
 
-// determina como será o objeto que deve ser desenhado na cena
+// determina como será o objeto que deve ser desenhado na cena, determinando qual
+// malha e material usar e onde vai ser posicionado
 struct RenderObject {
     std::string meshName;
-    std::string materialName;
     glm::mat4 transformMatrix;
 };
 
-
+// diz para a GPU como o objeto deve ser desenhado com sua cor e matriz de transformação
+struct GPUDrawPushConstants {
+    glm::mat4 transform;
+    glm::vec4 color;
+};
 
 class VulkanApplication {
     public:
@@ -88,6 +102,9 @@ class VulkanApplication {
     void cleanup();
     
     private:
+
+    const float MODEL_SCALE = 10.0f;
+
     void initWindow();
     void initVulkan();
     void mainLoop();
@@ -105,12 +122,14 @@ class VulkanApplication {
     void createCommandPool();
     void createDepthResources();
     void createFramebuffers();
-    void createTextureImage();
-    void createTextureImageView();
-    void createTextureSampler();
-    void loadModel();
-    void createVertexBuffer();
-    void createIndexBuffer();
+
+    // ---------------- funções para organização e carregamento de objetos ----------------- //
+
+    void load_model(const char* filename); // carrega objeto e mtl
+    void create_mesh_buffers(Mesh& mesh);  // cria buffers para uma malha
+    void setup_scene();                   // cria lista de objetos da cena para renderizar
+    void update_scene(float deltaTime);    // atualiza a posição dos objetos na cena a cada frame
+
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
@@ -175,20 +194,19 @@ class VulkanApplication {
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
     
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
+
+    // --- "banco de dados" para armazenar objetos e materiais --- //
+    std::unordered_map<std::string, Material> _materials; //armazena os materias
+    std::unordered_map<std::string, Mesh> _meshes; // armazena as malhas
+    std::vector<RenderObject> _staticRenderables;  // Para mesa, lâmpada, etc.
+    std::vector<RenderObject> _dynamicRenderables; // Para bolas, taco
+
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped;
     
-    VkImage textureImage;
-    VkDeviceMemory textureImageMemory;
-    VkImageView textureImageView;
-    VkSampler textureSampler;
+
+
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
     
