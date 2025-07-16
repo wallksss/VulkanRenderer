@@ -505,8 +505,8 @@ void VulkanApplication::setup_scene() {
     if (_meshes.find(lamp_object.meshName) == _meshes.end()) {
          std::cerr << "[ERROR] Lamp mesh not found: " << lamp_object.meshName << std::endl;
     }
-    glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(-3.0f, 5.6f, 0.0f));
-    glm::vec3 new_scale_vector = glm::vec3(2.0f);
+    glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(-3.0f, 5.8f, 0.0f));
+    glm::vec3 new_scale_vector = glm::vec3(3.5f);
     glm::mat4 lamp_scale = glm::scale(glm::mat4(1.0f), new_scale_vector);
     lamp_object.transformMatrix = lamp_translation * lamp_scale;
     _staticRenderables.push_back(lamp_object);
