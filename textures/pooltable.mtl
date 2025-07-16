@@ -1,7 +1,7 @@
-# Blender 4.4.3 MTL File: 'pooltable.blend'
+# Blender 4.4.3 MTL File: 'None'
 # www.blender.org
 
-newmtl green.001
+newmtl green.002
 Ns 22.499992
 Ka 1.000000 1.000000 1.000000
 Kd 0.033749 0.318539 0.034111
@@ -11,7 +11,7 @@ Ni 1.450000
 d 1.000000
 illum 2
 
-newmtl pocket
+newmtl pocket.001
 Ns 241.736130
 Ka 1.000000 1.000000 1.000000
 Kd 0.025394 0.025394 0.025394
@@ -21,7 +21,7 @@ Ni 1.450000
 d 1.000000
 illum 2
 
-newmtl wood
+newmtl wood.001
 Ns 30.625004
 Ka 1.000000 1.000000 1.000000
 Kd 0.925826 0.384200 0.122179
