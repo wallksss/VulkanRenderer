@@ -498,14 +498,16 @@ void VulkanApplication::setup_scene() {
     glm::mat4 table_scale = glm::scale(glm::mat4(1.0f), scale_vector);
     table_object.transformMatrix = table_translation * table_scale;
     _staticRenderables.push_back(table_object);
-
+	
+	// LÂMPADA
     RenderObject lamp_object;
     lamp_object.meshName = assetInfoMap["lamp"].meshNameInObj;
     if (_meshes.find(lamp_object.meshName) == _meshes.end()) {
          std::cerr << "[ERROR] Lamp mesh not found: " << lamp_object.meshName << std::endl;
     }
-    glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 10.0f, 0.0f));
-    glm::mat4 lamp_scale = glm::scale(glm::mat4(1.0f), scale_vector);
+    glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(-3.0f, 5.6f, 0.0f));
+    glm::vec3 new_scale_vector = glm::vec3(2.0f);
+    glm::mat4 lamp_scale = glm::scale(glm::mat4(1.0f), new_scale_vector);
     lamp_object.transformMatrix = lamp_translation * lamp_scale;
     _staticRenderables.push_back(lamp_object);
     std::cout << "[INFO] Static renderables added." << std::endl;
@@ -1801,7 +1803,7 @@ VkFormat VulkanApplication::findSupportedFormat(const std::vector<VkFormat>& can
 }
 
 VkFormat VulkanApplication::findDepthFormat() {
-    return findSupportedFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT);
+    return findSupportedFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT); //VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT
 }
 
 bool VulkanApplication::hasStencilComponent(VkFormat format) {
