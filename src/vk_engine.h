@@ -18,7 +18,7 @@
 #include "mesh.h"
 #include "initializers.h"
 
-const float BALL_RADIUS = 0.057f;
+const float BALL_RADIUS = 0.16f;
 
 struct PoolBall {
     int id;
@@ -130,6 +130,8 @@ class VulkanApplication {
     void setup_scene();                   // cria lista de objetos da cena para renderizar
     void update_scene(float deltaTime);    // atualiza a posição dos objetos na cena a cada frame
     void create_debug_axes();             // cria eixos de depuração para visualização
+    void draw_debug_vertical_line(glm::vec2 xz_pos, float height, const std::string& name, const std::string& materialName);
+    void create_debug_bounds_lines();
 
     void createUniformBuffers();
     void createDescriptorPool();
@@ -227,10 +229,9 @@ class VulkanApplication {
     glm::vec2 table_min_bounds;
     glm::vec2 table_max_bounds;
 
-    // Camera state for orbiting
-    float cameraYaw = glm::radians(45.0f);
+    float cameraYaw = glm::radians(60.0f);
     float cameraPitch = glm::radians(45.0f);
-    float cameraDistance = 5.0f;
+    float cameraDistance = 15.0f;
 };
 
 

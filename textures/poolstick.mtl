@@ -1,7 +1,7 @@
-# Blender 4.4.3 MTL File: 'pooltable.blend'
+# Blender 4.4.3 MTL File: 'None'
 # www.blender.org
 
-newmtl black
+newmtl black.002
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
 Kd 0.046962 0.046962 0.046962
@@ -11,17 +11,7 @@ Ni 1.450000
 d 1.000000
 illum 2
 
-newmtl brown
-Ns 250.000000
-Ka 1.000000 1.000000 1.000000
-Kd 0.800000 0.800000 0.800000
-Ks 0.500000 0.500000 0.500000
-Ke 0.000000 0.000000 0.000000
-Ni 1.450000
-d 1.000000
-illum 2
-
-newmtl dark_red
+newmtl dark_red.002
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
 Kd 0.114936 0.005806 0.004758
@@ -31,7 +21,7 @@ Ni 1.450000
 d 1.000000
 illum 2
 
-newmtl dark_wood
+newmtl dark_wood.002
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
 Kd 0.184469 0.061737 0.006678
@@ -41,7 +31,7 @@ Ni 1.450000
 d 1.000000
 illum 2
 
-newmtl wood_shaft
+newmtl wood_shaft.002
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
 Kd 0.800000 0.586796 0.323496

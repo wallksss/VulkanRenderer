@@ -169,11 +169,11 @@ void VulkanApplication::setupPoolTable() {
         }
     }
     
-    cue.angle = 0.0f;
+    cue.angle = 1.57f;
     cue.power = 5.0f;
     
-    table_min_bounds = {-1.0f, -2.0f};
-    table_max_bounds = {1.0f, 2.0f};
+    table_min_bounds = {-63.0f * BALL_RADIUS, -25.0f * BALL_RADIUS};
+    table_max_bounds = {21.0f * BALL_RADIUS, 25.0f * BALL_RADIUS};
 }
 
 void VulkanApplication::processInput(float deltaTime) {
@@ -221,7 +221,7 @@ void VulkanApplication::processInput(float deltaTime) {
 
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
         // Atirar!
-        glm::vec2 direction = {glm::cos(cue.angle), glm::sin(cue.angle)};
+        glm::vec2 direction = {-1 * glm::cos(cue.angle), glm::sin(cue.angle)};
         balls[0].velocity = direction * cue.power;
         balls[0].is_moving = true;
     }
@@ -253,20 +253,45 @@ void VulkanApplication::updatePhysics(float deltaTime) {
     
     // Lógica de Colisão
     // 5.1: Colisão Bola-Parede
-    for (auto& ball : balls) {
+    for (size_t i = 0; i < balls.size(); ++i) {
+        auto& ball = balls[i];
         if (ball.position.x - ball.radius < table_min_bounds.x) {
+            if (i == 0) {
+                std::cout << "CUE BALL COLLISION: LEFT WALL\n";
+                std::cout << "  Ball Pos-Radius X: " << ball.position.x - ball.radius << "\n";
+                std::cout << "  Bound: " << table_min_bounds.x << "\n";
+                std::cout << "  Inverting X velocity.\n";
+            }
             ball.position.x = table_min_bounds.x + ball.radius;
             ball.velocity.x *= -1; // Inverte velocidade no eixo X
         }
         if (ball.position.x + ball.radius > table_max_bounds.x) {
+            if (i == 0) {
+                std::cout << "CUE BALL COLLISION: RIGHT WALL\n";
+                std::cout << "  Ball Pos+Radius X: " << ball.position.x + ball.radius << "\n";
+                std::cout << "  Bound: " << table_max_bounds.x << "\n";
+                std::cout << "  Inverting X velocity.\n";
+            }
             ball.position.x = table_max_bounds.x - ball.radius;
             ball.velocity.x *= -1;
         }
         if (ball.position.y - ball.radius < table_min_bounds.y) {
+            if (i == 0) {
+                std::cout << "CUE BALL COLLISION: BOTTOM WALL\n";
+                std::cout << "  Ball Pos-Radius Y: " << ball.position.y - ball.radius << "\n";
+                std::cout << "  Bound: " << table_min_bounds.y << "\n";
+                std::cout << "  Inverting Y velocity.\n";
+            }
             ball.position.y = table_min_bounds.y + ball.radius;
             ball.velocity.y *= -1; // Inverte velocidade no eixo Y
         }
         if (ball.position.y + ball.radius > table_max_bounds.y) {
+            if (i == 0) {
+                std::cout << "CUE BALL COLLISION: TOP WALL\n";
+                std::cout << "  Ball Pos+Radius Y: " << ball.position.y + ball.radius << "\n";
+                std::cout << "  Bound: " << table_max_bounds.y << "\n";
+                std::cout << "  Inverting Y velocity.\n";
+            }
             ball.position.y = table_max_bounds.y - ball.radius;
             ball.velocity.y *= -1;
         }
@@ -513,8 +538,7 @@ void VulkanApplication::setup_scene() {
     if (_meshes.find(table_object.meshName) == _meshes.end()) {
          std::cerr << "ERRO: Malha da mesa '" << table_object.meshName << "' nao encontrada!" << std::endl;
     }
-    // Move a mesa para baixo para que sua superfície fique no plano Z=0
-    glm::mat4 table_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -10.0f));
+    glm::mat4 table_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
     glm::mat4 table_scale = glm::scale(glm::mat4(1.0f), scale_vector);
     table_object.transformMatrix = table_translation * table_scale;
     _staticRenderables.push_back(table_object);
@@ -526,7 +550,7 @@ void VulkanApplication::setup_scene() {
          std::cerr << "ERRO: Malha da lampada '" << lamp_object.meshName << "' nao encontrada!" << std::endl;
     }
     // Posiciona a lâmpada acima da mesa
-    glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+    glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 10.0f, 0.0f));
     glm::mat4 lamp_scale = glm::scale(glm::mat4(1.0f), scale_vector);
     lamp_object.transformMatrix = lamp_translation * lamp_scale;
     _staticRenderables.push_back(lamp_object);
@@ -653,6 +677,54 @@ void VulkanApplication::create_debug_axes() {
     }
 }
 
+void VulkanApplication::draw_debug_vertical_line(glm::vec2 xz_pos, float height, const std::string& name, const std::string& materialName) {
+    const float width = 0.02f;
+
+    Mesh lineMesh;
+    // A quad parallel to the Y axis, facing Z.
+    lineMesh._vertices.push_back({{xz_pos.x - width, 0.0f, xz_pos.y}, {0,0}});
+    lineMesh._vertices.push_back({{xz_pos.x + width, 0.0f, xz_pos.y}, {0,0}});
+    lineMesh._vertices.push_back({{xz_pos.x + width, height, xz_pos.y}, {0,0}});
+    lineMesh._vertices.push_back({{xz_pos.x - width, height, xz_pos.y}, {0,0}});
+    lineMesh._indices = {0, 1, 2, 0, 2, 3};
+
+    SubMesh submesh;
+    submesh.materialName = materialName;
+    submesh.firstIndex = 0;
+    submesh.indexCount = 6;
+    lineMesh._subMeshes.push_back(submesh);
+
+    create_mesh_buffers(lineMesh);
+    _meshes[name] = lineMesh;
+
+    RenderObject line_object;
+    line_object.meshName = name;
+    line_object.transformMatrix = glm::mat4(1.0f);
+    _staticRenderables.push_back(line_object);
+}
+
+void VulkanApplication::create_debug_bounds_lines() {
+    // Create a material for the debug lines
+    _materials["debug_white"] = Material{{1.0f, 1.0f, 1.0f}};
+
+    const float lineHeight = 2.0f; // Arbitrary height
+
+    // Get the 4 corner points
+    glm::vec2 min = table_min_bounds;
+    glm::vec2 max = table_max_bounds;
+
+    glm::vec2 p1 = {min.x, min.y}; // bottom-left
+    glm::vec2 p2 = {max.x, min.y}; // bottom-right
+    glm::vec2 p3 = {max.x, max.y}; // top-right
+    glm::vec2 p4 = {min.x, max.y}; // top-left
+
+    // Draw the 4 lines
+    draw_debug_vertical_line(p1, lineHeight, "debug_line_1", "debug_white");
+    draw_debug_vertical_line(p2, lineHeight, "debug_line_2", "debug_white");
+    draw_debug_vertical_line(p3, lineHeight, "debug_line_3", "debug_white");
+    draw_debug_vertical_line(p4, lineHeight, "debug_line_4", "debug_white");
+}
+
 // Em vk_engine.cpp
 
 // Em vk_engine.cpp
@@ -740,7 +812,8 @@ void VulkanApplication::initVulkan() {
     setupPoolTable();
     std::cout << "  [OK] setupPoolTable" << std::endl;
     setup_scene(); // Já temos logs dentro desta
-    create_debug_axes(); // Adiciona os eixos de depuração
+    // create_debug_bounds_lines();
+    // create_debug_axes(); // Adiciona os eixos de depuração
     std::cout << "  [OK] setup_scene" << std::endl;
 
     createUniformBuffers();
@@ -1359,9 +1432,9 @@ void VulkanApplication::updateUniformBuffer(uint32_t currentImage) {
 
     // Calculate camera position based on yaw, pitch, and distance (orbiting camera)
     glm::vec3 cameraPos;
-    cameraPos.x = lookAtTarget.x + cameraDistance * cos(cameraPitch) * sin(cameraYaw);
-    cameraPos.y = lookAtTarget.y + cameraDistance * cos(cameraPitch) * cos(cameraYaw);
-    cameraPos.z = lookAtTarget.z + cameraDistance * sin(cameraPitch);
+    cameraPos.x = lookAtTarget.x + cameraDistance * cos(cameraPitch) * cos(cameraYaw);
+    cameraPos.y = lookAtTarget.y + cameraDistance * sin(cameraPitch);
+    cameraPos.z = lookAtTarget.z + cameraDistance * cos(cameraPitch) * sin(cameraYaw);
 
     // O vetor "para cima" da câmera agora é o eixo Y do mundo.
     // Isso estabiliza a câmera e evita o gimbal lock ao olhar diretamente para baixo do eixo Z.
