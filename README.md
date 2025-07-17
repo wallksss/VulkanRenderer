@@ -2,6 +2,13 @@
 
 This project is a 3D pool game simulator written in C++ and using the Vulkan SDK.
 
+## Authors
+
+*   [Anderson Sassaki](https://github.com/wallksss): Resposible for setting up window creation, Vulkan, shaders and all the basics.
+*   [Giovanna Vieira](https://github.com/gihtheghost): Loaded the objects and their textures on scene.
+*   [Lorenzo Grippo](https://github.com/loren-gc): Resposible for setting up the lighting and make everything look pretty.
+*   [Ti Ribeiro](https://github.com/tiribsil): User input, physics emulation and object movement.
+
 ## Fulfillment of Project Specifications
 
 This section details how each requirement from the assignment was met.
@@ -41,6 +48,11 @@ To build and run this project, you will need the following dependencies installe
 *   **GLM (OpenGL Mathematics)**: A header-only library for vector and matrix operations.
 *   **A C++17 compatible compiler**: Such as g++ on Linux or MSVC on Windows.
 *   **Make**: The build system used for this project.
+
+You can run the following command to install all dependencies in Debian based Linux distributions:
+```bash
+apt install glslc libvulkan-dev libglfw3-dev libglm-dev libxi-dev libxxf86vm-dev vulkan-validationlayers
+```
 
 ## Building the Project
 
