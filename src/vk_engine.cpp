@@ -95,6 +95,9 @@ void VulkanApplication::run() {
 void VulkanApplication::cleanup() {
     cleanupSwapChain();
     
+    vkDestroyBuffer(device, lightBuffer, nullptr);
+    vkFreeMemory(device, lightBufferMemory, nullptr);
+
     for(size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroyBuffer(device, uniformBuffers[i], nullptr);
         vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
@@ -166,7 +169,7 @@ void VulkanApplication::setupPoolTable() {
     }
 
     cue.angle = 0.0f;
-    cue.power = 8.0f;
+    cue.power = 10.0f;
 
     table_min_bounds = {-63.0f * BALL_RADIUS, -25.0f * BALL_RADIUS};
     table_max_bounds = {21.0f * BALL_RADIUS, 25.0f * BALL_RADIUS};
@@ -400,6 +403,14 @@ void VulkanApplication::load_model(const char* filename) {
                 attrib.vertices[3 * index.vertex_index + 2]
             };
 
+            if (index.normal_index >= 0) {
+                vertex.normal = {
+                    attrib.normals[3 * index.normal_index + 0],
+                    attrib.normals[3 * index.normal_index + 1],
+                    attrib.normals[3 * index.normal_index + 2]
+                };
+            }
+
             if (index.texcoord_index >= 0) {
                 vertex.texCoord = {
                     attrib.texcoords[2 * index.texcoord_index + 0],
@@ -498,14 +509,16 @@ void VulkanApplication::setup_scene() {
     glm::mat4 table_scale = glm::scale(glm::mat4(1.0f), scale_vector);
     table_object.transformMatrix = table_translation * table_scale;
     _staticRenderables.push_back(table_object);
-
+	
+	// LÂMPADA
     RenderObject lamp_object;
     lamp_object.meshName = assetInfoMap["lamp"].meshNameInObj;
     if (_meshes.find(lamp_object.meshName) == _meshes.end()) {
          std::cerr << "[ERROR] Lamp mesh not found: " << lamp_object.meshName << std::endl;
     }
-    glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 10.0f, 0.0f));
-    glm::mat4 lamp_scale = glm::scale(glm::mat4(1.0f), scale_vector);
+    glm::mat4 lamp_translation = glm::translate(glm::mat4(1.0f), glm::vec3(-3.0f, 7.8f, 0.0f));
+    glm::vec3 new_scale_vector = glm::vec3(3.5f);
+    glm::mat4 lamp_scale = glm::scale(glm::mat4(1.0f), new_scale_vector);
     lamp_object.transformMatrix = lamp_translation * lamp_scale;
     _staticRenderables.push_back(lamp_object);
     std::cout << "[INFO] Static renderables added." << std::endl;
@@ -1033,11 +1046,14 @@ void VulkanApplication::createRenderPass() {
 
 void VulkanApplication::createDescriptorSetLayout() {
     VkDescriptorSetLayoutBinding uboLayoutBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 0);
+    VkDescriptorSetLayoutBinding lightLayoutBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
+
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, lightLayoutBinding};
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &uboLayoutBinding;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
 
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create descriptor set layout.");
@@ -1176,17 +1192,23 @@ void VulkanApplication::createUniformBuffers() {
         createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
         vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
     }
+
+    VkDeviceSize lightBufferSize = sizeof(Light);
+    createBuffer(lightBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, lightBuffer, lightBufferMemory);
+    vkMapMemory(device, lightBufferMemory, 0, lightBufferSize, 0, &lightBufferMapped);
 }
 
 void VulkanApplication::createDescriptorPool() {
-    VkDescriptorPoolSize poolSize{};
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
     poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
     if(vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
@@ -1213,9 +1235,16 @@ void VulkanApplication::createDescriptorSets() {
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObject);
 
-        VkWriteDescriptorSet descriptorWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptorSets[i], &bufferInfo, 0);
+        VkDescriptorBufferInfo lightBufferInfo{};
+        lightBufferInfo.buffer = lightBuffer;
+        lightBufferInfo.offset = 0;
+        lightBufferInfo.range = sizeof(Light);
 
-        vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        descriptorWrites[0] = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptorSets[i], &bufferInfo, 0);
+        descriptorWrites[1] = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptorSets[i], &lightBufferInfo, 1);
+
+        vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
 }
 
@@ -1329,6 +1358,12 @@ void VulkanApplication::updateUniformBuffer(uint32_t currentImage) {
     ubo.proj[1][1] *= -1;
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+
+    Light light;
+    light.position = glm::vec3(-3.0f, 5.5f, 0.0f);
+    light.radius = 13.0f;
+    light.intensity = 1.2f;
+    memcpy(lightBufferMapped, &light, sizeof(light));
 }
 
 void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
@@ -1339,7 +1374,7 @@ void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint3
     }
 
     std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color = {{0.0f, 0.05f, 0.1f, 1.0f}};
+    clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
     clearValues[1].depthStencil = {1.0f, 0};
 
     VkRenderPassBeginInfo renderPassInfo = vkinit::renderpass_begin_info(renderPass, swapChainExtent, swapChainFramebuffers[imageIndex]);
@@ -1801,7 +1836,7 @@ VkFormat VulkanApplication::findSupportedFormat(const std::vector<VkFormat>& can
 }
 
 VkFormat VulkanApplication::findDepthFormat() {
-    return findSupportedFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT);
+    return findSupportedFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT); //VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT
 }
 
 bool VulkanApplication::hasStencilComponent(VkFormat format) {

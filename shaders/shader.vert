@@ -1,26 +1,28 @@
 #version 450
 
 layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec2 inTexCoord; // Corrigido para location = 1
+layout(location = 1) in vec2 inTexCoord;
+layout(location = 2) in vec3 inNormal;
 
-// UBO para matrizes de câmera (view, projection)
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 view;
     mat4 proj;
 } ubo;
 
-// Push Constants para dados por objeto (transformação, cor)
 layout(push_constant) uniform constants {
     mat4 transform;
     vec4 color;
 } push;
 
-// Saída para o Fragment Shader
-layout(location = 0) out vec4 fragColor;
-layout(location = 1) out vec2 fragTexCoord;
+layout(location = 0) out vec3 fragNormal;
+layout(location = 1) out vec3 fragPos;
+layout(location = 2) out vec4 fragColor;
 
 void main() {
-    gl_Position = ubo.proj * ubo.view * push.transform * vec4(inPosition, 1.0);
-    fragColor = push.color; // Passa a cor do material para o fragment shader
-    fragTexCoord = inTexCoord;
+    vec4 worldPosition = push.transform * vec4(inPosition, 1.0);
+    gl_Position = ubo.proj * ubo.view * worldPosition;
+    
+    fragPos = vec3(worldPosition);
+    fragNormal = mat3(transpose(inverse(push.transform))) * inNormal;
+    fragColor = push.color;
 }
