@@ -74,17 +74,17 @@ endif
 # =============================================================================
 .PHONY: all clean run shaders
 
-all: shaders $(TARGET_EXEC)
+all: $(TARGET_EXEC)
 
-$(TARGET_EXEC): $(OBJECTS)
+$(TARGET_EXEC): $(OBJECTS) | shaders
 	@echo "[LD]   $@"
 ifeq ($(OS_NAME),Linux)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(LIBS)
 else
-	$(CXX) $(CXXFLAGS) /Fe$@ $^ $(LIBS) /link $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) /Fe$@ $(OBJECTS) $(LIBS) /link $(LDFLAGS)
 endif
 
-$(OBJDIR)/%.o: $(SRCDIR)/%.cpp shaders shaders
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	@mkdir -p $(OBJDIR)
 	@echo "[CXX]  $<"
 ifeq ($(OS_NAME),Linux)
