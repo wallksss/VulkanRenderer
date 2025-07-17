@@ -7,15 +7,15 @@
 struct Vertex {
   glm::vec3 pos;
   glm::vec2 texCoord;
-  //glm::vec3 normal;
+  glm::vec3 normal;
 
   // Returns the binding description for a vertex.
   static VkVertexInputBindingDescription getBindingDescription();
   
   // Returns the attribute descriptions for a vertex.
-  static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
+  static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions();
 
   bool operator==(const Vertex& other) const {
-    return pos == other.pos && texCoord == other.texCoord;
+    return pos == other.pos && texCoord == other.texCoord && normal == other.normal;
   }
 };

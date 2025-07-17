@@ -55,6 +55,12 @@ struct UniformBufferObject {
     alignas(16) glm::mat4 proj;
 };
 
+struct Light {
+    alignas(16) glm::vec3 position;
+    alignas(4) float radius;
+    alignas(4) float intensity;
+};
+
 struct Material {
 	glm::vec3 color{1.0f, 1.0f, 1.0f};
 };
@@ -255,6 +261,10 @@ class VulkanApplication {
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped;
+
+    VkBuffer lightBuffer;
+    VkDeviceMemory lightBufferMemory;
+    void* lightBufferMapped;
     
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
