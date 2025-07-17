@@ -1,6 +1,6 @@
 # Vulkan Pool
 
-A simple 2D pool game built with C++ and the Vulkan API.
+A simple pool game simulator built with C++ and the Vulkan API.
 
 ## Requirements
 
@@ -42,13 +42,11 @@ make
 
 ## Running the Application
 
-To run the compiled application, use the following command:
+To run the compiled application, use:
 
 ```bash
 make run
 ```
-
-This will launch the Vulkan Pool game in a new window.
 
 ## Controls
 
@@ -61,4 +59,4 @@ This will launch the Vulkan Pool game in a new window.
 ### Game Controls
 
 *   **Left / Right Arrow Keys**: Rotate the cue stick around the cue ball.
-*   **Spacebar**: Shoot the cue ball in the direction the stick is pointing.
+*   **Spacebar**: Shoot the cue ball.
